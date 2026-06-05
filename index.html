@@ -17,7 +17,6 @@ td,th{border:1px #ddd solid;padding:8px;text-align:center}
 .fresh-btn{background:#23a957;margin-bottom:8px;}
 .in{color:#09943c;font-weight:bold}
 .out{color:#e53935;font-weight:bold}
-.opt{background:#9c27b0}
 </style>
 </head>
 <body>
@@ -28,12 +27,8 @@ td,th{border:1px #ddd solid;padding:8px;text-align:center}
         <input placeholder="账号" id="acc">
         <input placeholder="密码" type="password" id="pwd">
     </div>
-    <button onclick="login()">登录</button>
     <button onclick="reg()">注册新账号</button>
-    <br>
-    <button class="opt" onclick="exportData()">导出全服存档</button>
-    <button class="opt" onclick="document.getElementById('fileIn').click()">导入存档文件</button>
-    <input type="file" id="fileIn" hidden accept=".json" onchange="importData(event)">
+    <button onclick="login()">登录</button>
 </div>
 
 <div class="box hide" id="mainBox">
@@ -60,7 +55,6 @@ td,th{border:1px #ddd solid;padding:8px;text-align:center}
         <p>提示：提交兑换立即暂扣绷金，管理员驳回自动原路退回</p>
     </div>
 
-    <!--普通用户：全体玩家余额区域清空不展示-->
     <div class="box hide" id="allUserBox">
         <h4>全体玩家实时余额清单</h4>
         <div id="allUserTable"></div>
@@ -83,58 +77,57 @@ td,th{border:1px #ddd solid;padding:8px;text-align:center}
 </div>
 
 <script>
-let userData = JSON.parse(localStorage.getItem('bengUser')) || {admin:{pwd:'123456',money:0}};
-let applyData = JSON.parse(localStorage.getItem('bengApply')) || [];
-let exchangeData = JSON.parse(localStorage.getItem('bengExchange')) || [];
-let billLog = JSON.parse(localStorage.getItem('bengBill')) || [];
-let currUser = '';
+const DB_URL = "https://jsonbin.io/api/v1/bins/6666f99c8a434340270e3615";
+let userData = {admin:{pwd:"123456",money:0}};
+let applyData = [];
+let exchangeData = [];
+let billLog = [];
+let currUser = "";
 const NEED_EXCHANGE = 1000000;
 
-function saveAll(){
-    localStorage.setItem('bengUser',JSON.stringify(userData));
-    localStorage.setItem('bengApply',JSON.stringify(applyData));
-    localStorage.setItem('bengExchange',JSON.stringify(exchangeData));
-    localStorage.setItem('bengBill',JSON.stringify(billLog));
-}
-
-//导出存档json
-function exportData(){
-    let save={user:userData,apply:applyData,exchange:exchangeData,bill:billLog};
-    let blob=new Blob([JSON.stringify(save)],{type:"application/json"});
-    let a=document.createElement('a');
-    a.href=URL.createObjectURL(blob);
-    a.download="绷金全服存档.json";
-    a.click();
-}
-//导入存档json
-function importData(e){
-    let f=e.target.files[0];
-    let r=new FileReader();
-    r.onload=function(){
-        let d=JSON.parse(r.result);
-        userData=d.user;applyData=d.apply;exchangeData=d.exchange;billLog=d.bill;
-        saveAll();
-        alert("存档导入成功，刷新页面生效");
-        location.reload();
+//读取云端
+async function getData(){
+    try{
+        let res = await fetch(DB_URL);
+        let json = await res.json();
+        let d = json.data;
+        userData = d.user;
+        applyData = d.apply;
+        exchangeData = d.exchange;
+        billLog = d.bill;
+    }catch{
+        await saveData();
     }
-    r.readAsText(f);
+}
+//保存云端
+async function saveData(){
+    let save = {user:userData,apply:applyData,exchange:exchangeData,bill:billLog};
+    fetch(DB_URL,{
+        method:"PUT",
+        headers:{"Content-Type":"application/json","X-Master-Key":"$2a$10$Kz8X7vQwPqYl6bPvF9kGTe8xQyR1zW3n5d7s9a0b2c4e6f8g"} ,
+        body:JSON.stringify({data:save})
+    }).catch(e=>{});
 }
 
 function addBill(name,type,money,desc){
     let time=new Date().toLocaleString();
     billLog.push({user:name,type,num:money,info:desc,time});
-    saveAll();
+    saveData();
 }
 
-function reg(){
+async function reg(){
+    await getData();
     let u = document.getElementById('acc').value.trim();
     let p = document.getElementById('pwd').value.trim();
     if(!u||!p)return alert('账号密码不能为空');
     if(userData[u])return alert('账号已存在');
-    userData[u]={pwd:p,money:0};saveAll();alert('注册成功');
+    userData[u]={pwd:p,money:0};
+    await saveData();
+    alert('注册成功');
 }
 
-function login(){
+async function login(){
+    await getData();
     let u = document.getElementById('acc').value.trim();
     let p = document.getElementById('pwd').value.trim();
     if(!userData[u]||userData[u].pwd!==p)return alert('账号或密码错误');
@@ -144,12 +137,8 @@ function login(){
     loadAllData();
 }
 
-function loadAllData(){
-    userData = JSON.parse(localStorage.getItem('bengUser'))||{admin:{pwd:'123456',money:0}};
-    applyData = JSON.parse(localStorage.getItem('bengApply'))||[];
-    exchangeData = JSON.parse(localStorage.getItem('bengExchange'))||[];
-    billLog = JSON.parse(localStorage.getItem('bengBill'))||[];
-
+async function loadAllData(){
+    await getData();
     document.getElementById('nowUser').innerText = currUser;
     document.getElementById('myMoney').innerText = userData[currUser].money;
 
@@ -190,10 +179,10 @@ function submitApply(){
     if(!no)return alert('必须填写申请编号！');
     if(!code)return alert('背面核验码不能为空！');
     applyData.push({user:currUser,code:no,verify:code,id:Date.now()});
-    saveAll();
+    saveData();
     document.getElementById('applyNo').value='';
     document.getElementById('verifyCode').value='';
-    alert('充值申请提交成功');
+    alert('充值申请提交成功，管理员点【一键刷新】即可看到');
 }
 
 function submitExchange(){
@@ -205,9 +194,9 @@ function submitExchange(){
     userData[currUser].money -= NEED_EXCHANGE;
     addBill(currUser,'out',NEED_EXCHANGE,'申请兑换5米，绷金临时暂扣');
     exchangeData.push({user:currUser,cost:NEED_EXCHANGE,id:Date.now()});
-    saveAll();
+    saveData();
     loadAllData();
-    alert('兑换申请已提交');
+    alert('兑换申请已提交，绷金临时暂扣；管理员驳回将自动退回');
 }
 
 function renderAdmin(){
@@ -245,23 +234,23 @@ function passApply(idx){
     userData[info.user].money += add;
     addBill(info.user,'in',add,`管理员审批充值入账，申请编号：${info.code}，核验码：${info.verify}`);
     applyData.splice(idx,1);
-    saveAll();
+    saveData();
     loadAllData();
 }
 function refuseApply(idx){
-    applyData.splice(idx,1);saveAll();loadAllData();
+    applyData.splice(idx,1);saveData();loadAllData();
 }
 
 function passEx(idx){
     exchangeData.splice(idx,1);
-    saveAll();loadAllData();
+    saveData();loadAllData();
     alert('兑换审核通过，奖品生效，暂扣绷金不再返还');
 }
 function refuseEx(idx){
     let info = exchangeData[idx];
     userData[info.user].money += info.cost;
     addBill(info.user,'in',info.cost,'兑换申请驳回，暂扣绷金原路退回');
-    exchangeData.splice(idx,1);saveAll();loadAllData();
+    exchangeData.splice(idx,1);saveData();loadAllData();
     alert(`${info.cost}绷金已原路退回`);
 }
 
@@ -274,7 +263,7 @@ function doTransfer(){
     userData[to].money += num;
     addBill(currUser,'out',num,`转账给${to}`);
     addBill(to,'in',num,`收到${currUser}转账`);
-    saveAll();loadAllData();
+    saveData();loadAllData();
     document.getElementById('transNum').value='';
     alert('转账完成');
 }
@@ -286,6 +275,8 @@ function logout(){
     document.getElementById('acc').value='';
     document.getElementById('pwd').value='';
 }
+
+(async ()=>await getData())();
 </script>
 </body>
 </html>
