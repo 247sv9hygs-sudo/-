@@ -17,6 +17,7 @@ td,th{border:1px #ddd solid;padding:8px;text-align:center}
 .fresh-btn{background:#23a957;margin-bottom:8px;}
 .in{color:#09943c;font-weight:bold}
 .out{color:#e53935;font-weight:bold}
+.opt{background:#9c27b0}
 </style>
 </head>
 <body>
@@ -29,6 +30,10 @@ td,th{border:1px #ddd solid;padding:8px;text-align:center}
     </div>
     <button onclick="login()">登录</button>
     <button onclick="reg()">注册新账号</button>
+    <br>
+    <button class="opt" onclick="exportData()">导出全服存档</button>
+    <button class="opt" onclick="document.getElementById('fileIn').click()">导入存档文件</button>
+    <input type="file" id="fileIn" hidden accept=".json" onchange="importData(event)">
 </div>
 
 <div class="box hide" id="mainBox">
@@ -55,6 +60,7 @@ td,th{border:1px #ddd solid;padding:8px;text-align:center}
         <p>提示：提交兑换立即暂扣绷金，管理员驳回自动原路退回</p>
     </div>
 
+    <!--普通用户：全体玩家余额区域清空不展示-->
     <div class="box hide" id="allUserBox">
         <h4>全体玩家实时余额清单</h4>
         <div id="allUserTable"></div>
@@ -77,141 +83,209 @@ td,th{border:1px #ddd solid;padding:8px;text-align:center}
 </div>
 
 <script>
-const KEY = "bjdata001";
-let userData = {admin:{pwd:'123456',money:0}};
-let applyData = [];
-let exchangeData = [];
-let billLog = [];
+let userData = JSON.parse(localStorage.getItem('bengUser')) || {admin:{pwd:'123456',money:0}};
+let applyData = JSON.parse(localStorage.getItem('bengApply')) || [];
+let exchangeData = JSON.parse(localStorage.getItem('bengExchange')) || [];
+let billLog = JSON.parse(localStorage.getItem('bengBill')) || [];
 let currUser = '';
 const NEED_EXCHANGE = 1000000;
 
-async function getDb(){
-  try{
-    let res=await fetch('https://jsonblob.com/api/jsonBlob/1286474324591269888');
-    let d=await res.json();
-    userData=d.user;applyData=d.apply;exchangeData=d.exchange;billLog=d.bill;
-  }catch{saveDb();}
+function saveAll(){
+    localStorage.setItem('bengUser',JSON.stringify(userData));
+    localStorage.setItem('bengApply',JSON.stringify(applyData));
+    localStorage.setItem('bengExchange',JSON.stringify(exchangeData));
+    localStorage.setItem('bengBill',JSON.stringify(billLog));
 }
-async function saveDb(){
-  let d={user:userData,apply:applyData,exchange:exchangeData,bill:billLog};
-  fetch('https://jsonblob.com/api/jsonBlob/1286474325623158784',{
-    method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(d)
-  }).catch(e=>{});
+
+//导出存档json
+function exportData(){
+    let save={user:userData,apply:applyData,exchange:exchangeData,bill:billLog};
+    let blob=new Blob([JSON.stringify(save)],{type:"application/json"});
+    let a=document.createElement('a');
+    a.href=URL.createObjectURL(blob);
+    a.download="绷金全服存档.json";
+    a.click();
+}
+//导入存档json
+function importData(e){
+    let f=e.target.files[0];
+    let r=new FileReader();
+    r.onload=function(){
+        let d=JSON.parse(r.result);
+        userData=d.user;applyData=d.apply;exchangeData=d.exchange;billLog=d.bill;
+        saveAll();
+        alert("存档导入成功，刷新页面生效");
+        location.reload();
+    }
+    r.readAsText(f);
 }
 
 function addBill(name,type,money,desc){
     let time=new Date().toLocaleString();
     billLog.push({user:name,type,num:money,info:desc,time});
-    saveDb();
+    saveAll();
 }
 
-async function reg(){
-    await getDb();
-    let u=document.getElementById('acc').value.trim();
-    let p=document.getElementById('pwd').value.trim();
+function reg(){
+    let u = document.getElementById('acc').value.trim();
+    let p = document.getElementById('pwd').value.trim();
     if(!u||!p)return alert('账号密码不能为空');
     if(userData[u])return alert('账号已存在');
-    userData[u]={pwd:p,money:0};saveDb();alert('注册成功');
+    userData[u]={pwd:p,money:0};saveAll();alert('注册成功');
 }
 
-async function login(){
-    await getDb();
-    let u=document.getElementById('acc').value.trim();
-    let p=document.getElementById('pwd').value.trim();
-    if(!userData[u]||userData[u].pwd!==p)return alert('账号密码错误');
-    currUser=u;
+function login(){
+    let u = document.getElementById('acc').value.trim();
+    let p = document.getElementById('pwd').value.trim();
+    if(!userData[u]||userData[u].pwd!==p)return alert('账号或密码错误');
+    currUser = u;
     document.getElementById('loginBox').classList.add('hide');
     document.getElementById('mainBox').classList.remove('hide');
     loadAllData();
 }
 
-async function loadAllData(){
-    await getDb();
-    document.getElementById('nowUser').innerText=currUser;
-    document.getElementById('myMoney').innerText=userData[currUser].money;
-    let sel=document.getElementById('targetUser');sel.innerHTML='';
-    Object.keys(userData).forEach(n=>{
-        if(n!==currUser){
-            let o=document.createElement('option');
-            o.textContent=`${n}（${userData[n].money}绷金）`;o.value=n;sel.appendChild(o);
+function loadAllData(){
+    userData = JSON.parse(localStorage.getItem('bengUser'))||{admin:{pwd:'123456',money:0}};
+    applyData = JSON.parse(localStorage.getItem('bengApply'))||[];
+    exchangeData = JSON.parse(localStorage.getItem('bengExchange'))||[];
+    billLog = JSON.parse(localStorage.getItem('bengBill'))||[];
+
+    document.getElementById('nowUser').innerText = currUser;
+    document.getElementById('myMoney').innerText = userData[currUser].money;
+
+    let sel = document.getElementById('targetUser');
+    sel.innerHTML='';
+    Object.keys(userData).forEach(name=>{
+        if(name!==currUser){
+            let opt = document.createElement('option');
+            opt.textContent = `${name}（${userData[name].money}绷金）`;
+            opt.value = name;
+            sel.appendChild(opt);
         }
     })
+
     document.getElementById('allUserBox').classList.add('hide');
-    let bh='';
-    let my=billLog.filter(x=>x.user===currUser).reverse();
-    my.forEach(d=>{
-        let c=d.type=='in'?'in':'out';let s=d.type=='in'?'+':'-';
-        bh+=`<p class="${c}">${d.time}｜${d.info}｜${s}${d.num}绷金</p>`;
+
+    let billHtml='';
+    let myBill=billLog.filter(item=>item.user===currUser).reverse();
+    if(myBill.length===0) billHtml='暂无收支记录';
+    myBill.forEach(d=>{
+        let cls=d.type==='in'?'in':'out';
+        let symbol=d.type==='in'?'+':'-';
+        billHtml+=`<p class="${cls}">${d.time}｜${d.info}｜${symbol}${d.num}绷金</p>`;
     })
-    document.getElementById('billList').innerHTML=bh||'暂无收支记录';
-    if(currUser=='admin'){document.getElementById('adminPanel').classList.remove('hide');renderAdmin();}
-    else{document.getElementById('adminPanel').classList.add('hide');}
+    document.getElementById('billList').innerHTML=billHtml;
+
+    if(currUser==='admin'){
+        document.getElementById('adminPanel').classList.remove('hide');
+        renderAdmin();
+    }else{
+        document.getElementById('adminPanel').classList.add('hide');
+    }
 }
 
 function submitApply(){
-    let n=document.getElementById('applyNo').value.trim();
-    let c=document.getElementById('verifyCode').value.trim();
-    if(!n||!c)return alert('信息不能为空');
-    applyData.push({user:currUser,code:n,verify:c,id:Date.now()});saveDb();
-    document.getElementById('applyNo').value='';document.getElementById('verifyCode').value='';
-    alert('提交成功');
+    let no = document.getElementById('applyNo').value.trim();
+    let code = document.getElementById('verifyCode').value.trim();
+    if(!no)return alert('必须填写申请编号！');
+    if(!code)return alert('背面核验码不能为空！');
+    applyData.push({user:currUser,code:no,verify:code,id:Date.now()});
+    saveAll();
+    document.getElementById('applyNo').value='';
+    document.getElementById('verifyCode').value='';
+    alert('充值申请提交成功');
 }
+
 function submitExchange(){
-    let m=userData[currUser].money;
-    if(m<NEED_EXCHANGE)return alert('绷金不足');
-    userData[currUser].money-=NEED_EXCHANGE;
-    addBill(currUser,'out',NEED_EXCHANGE,'兑换暂扣');
+    let own = userData[currUser].money;
+    if(own<NEED_EXCHANGE){
+        alert(`绷金不足，无法兑换！现有${own}，需要${NEED_EXCHANGE}`);
+        return;
+    }
+    userData[currUser].money -= NEED_EXCHANGE;
+    addBill(currUser,'out',NEED_EXCHANGE,'申请兑换5米，绷金临时暂扣');
     exchangeData.push({user:currUser,cost:NEED_EXCHANGE,id:Date.now()});
-    saveDb();loadAllData();alert('兑换申请提交');
+    saveAll();
+    loadAllData();
+    alert('兑换申请已提交');
 }
 
 function renderAdmin(){
-    let ah='';
-    applyData.forEach((it,i)=>{
-        ah+=`<p>申请人：${it.user}｜编号${it.code}｜核验${it.verify}
-        <input id="in${i}" placeholder="填写数额" type="number">
-        <button onclick="pass(${i})">通过</button><button onclick="ref(${i})">驳回</button></p>`;
+    let applyHtml = '';
+    applyData.forEach((item,idx)=>{
+        applyHtml += `<p>申请人：${item.user}｜申请编号：${item.code}｜自定义核验码：${item.verify}
+        <input id="addNum${idx}" placeholder="输入批复绷金数额" type="number" min="1">
+        <button onclick="passApply(${idx})">审核通过</button>
+        <button onclick="refuseApply(${idx})">驳回</button>
+        </p>`;
     })
-    document.getElementById('applyBox').innerHTML=ah||'无申请';
-    let eh='';
-    exchangeData.forEach((it,i)=>{
-        eh+=`<p>${it.user}兑换，暂扣${it.cost}
-        <button onclick="pe(${i})">通过</button><button onclick="re(${i})">驳回</button></p>`;
+    document.getElementById('applyBox').innerHTML = applyHtml||'暂无充值申请';
+
+    let exHtml = '';
+    exchangeData.forEach((item,idx)=>{
+        exHtml += `<p>${item.user}申请兑换5米（已暂扣${item.cost}绷金）
+        <button onclick="passEx(${idx})">审核通过(奖品发放，钱不退回)</button>
+        <button onclick="refuseEx(${idx})">驳回(绷金原路返还)</button>
+        </p>`;
     })
-    document.getElementById('exchangeBox').innerHTML=eh||'无兑换';
-    let th='<table><tr><th>账号</th><th>密码</th><th>余额</th></tr>';
-    Object.keys(userData).forEach(k=>th+=`<tr><td>${k}</td><td>${userData[k].pwd}</td><td>${userData[k].money}</td></tr>`);
-    document.getElementById('adminAllUser').innerHTML=th+'</table>';
+    document.getElementById('exchangeBox').innerHTML = exHtml||'暂无兑换申请';
+
+    let uHtml = '<table><tr><th>账号</th><th>登录密码</th><th>绷金余额</th></tr>';
+    Object.keys(userData).forEach(n=>{
+        uHtml+=`<tr><td>${n}</td><td>${userData[n].pwd}</td><td>${userData[n].money}</td></tr>`;
+    })
+    uHtml+='</table>';
+    document.getElementById('adminAllUser').innerHTML=uHtml;
 }
-function pass(i){
-    let num=+document.getElementById('in'+i).value;
-    if(!num)return alert('填金额');
-    let it=applyData[i];userData[it.user].money+=num;
-    addBill(it.user,'in',num,'管理员审批入账');
-    applyData.splice(i,1);saveDb();loadAllData();
+
+function passApply(idx){
+    let add = +document.getElementById(`addNum${idx}`).value;
+    if(!add||add<=0)return alert('请填写有效绷金数额');
+    let info = applyData[idx];
+    userData[info.user].money += add;
+    addBill(info.user,'in',add,`管理员审批充值入账，申请编号：${info.code}，核验码：${info.verify}`);
+    applyData.splice(idx,1);
+    saveAll();
+    loadAllData();
 }
-function ref(i){applyData.splice(i,1);saveDb();loadAllData();}
-function pe(i){exchangeData.splice(i,1);saveDb();loadAllData();alert('兑换通过');}
-function re(i){
-    let it=exchangeData[i];userData[it.user].money+=it.cost;
-    addBill(it.user,'in',it.cost,'兑换驳回退款');
-    exchangeData.splice(i,1);saveDb();loadAllData();alert('钱款退回');
+function refuseApply(idx){
+    applyData.splice(idx,1);saveAll();loadAllData();
 }
+
+function passEx(idx){
+    exchangeData.splice(idx,1);
+    saveAll();loadAllData();
+    alert('兑换审核通过，奖品生效，暂扣绷金不再返还');
+}
+function refuseEx(idx){
+    let info = exchangeData[idx];
+    userData[info.user].money += info.cost;
+    addBill(info.user,'in',info.cost,'兑换申请驳回，暂扣绷金原路退回');
+    exchangeData.splice(idx,1);saveAll();loadAllData();
+    alert(`${info.cost}绷金已原路退回`);
+}
+
 function doTransfer(){
-    let to=document.getElementById('targetUser').value;
-    let num=+document.getElementById('transNum').value;
-    if(!num||userData[currUser].money<num)return alert('金额错误或余额不足');
-    userData[currUser].money-=num;userData[to].money+=num;
-    addBill(currUser,'out',num,'转给'+to);addBill(to,'in',num,'收到转账');
-    saveDb();loadAllData();document.getElementById('transNum').value='';alert('转账成功');
+    let to = document.getElementById('targetUser').value;
+    let num = +document.getElementById('transNum').value;
+    if(!num||num<=0)return alert('填写正确转账金额');
+    if(userData[currUser].money<num)return alert('绷金不足');
+    userData[currUser].money -= num;
+    userData[to].money += num;
+    addBill(currUser,'out',num,`转账给${to}`);
+    addBill(to,'in',num,`收到${currUser}转账`);
+    saveAll();loadAllData();
+    document.getElementById('transNum').value='';
+    alert('转账完成');
 }
+
 function logout(){
     currUser='';
     document.getElementById('loginBox').classList.remove('hide');
     document.getElementById('mainBox').classList.add('hide');
-    document.getElementById('acc').value='';document.getElementById('pwd').value='';
+    document.getElementById('acc').value='';
+    document.getElementById('pwd').value='';
 }
-(async ()=>await getDb())();
 </script>
 </body>
 </html>
