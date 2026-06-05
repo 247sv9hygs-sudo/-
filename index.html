@@ -77,7 +77,8 @@ td,th{border:1px #ddd solid;padding:8px;text-align:center}
 </div>
 
 <script>
-const DB_URL = "https://jsonbin.io/api/v1/bins/6666f99c8a434340270e3615";
+//国内果创云专用接口，国内全网络、微信浏览器无拦截
+const apiUrl = "https://api.yesapi.cn/api/DB/SetGetData?app_key=33B5D1679327D2C5E4E71343B6F347F7&table=bjdata&key=data1";
 let userData = {admin:{pwd:"123456",money:0}};
 let applyData = [];
 let exchangeData = [];
@@ -88,25 +89,20 @@ const NEED_EXCHANGE = 1000000;
 //读取云端
 async function getData(){
     try{
-        let res = await fetch(DB_URL);
+        let res = await fetch(apiUrl);
         let json = await res.json();
-        let d = json.data;
-        userData = d.user;
-        applyData = d.apply;
-        exchangeData = d.exchange;
-        billLog = d.bill;
-    }catch{
-        await saveData();
+        if(json.err_code === 0 && json.data.content){
+            let d = JSON.parse(json.data.content);
+            userData=d.user;applyData=d.apply;exchangeData=d.exchange;billLog=d.bill;
+        }
+    }catch(err){
+        saveData();
     }
 }
 //保存云端
 async function saveData(){
     let save = {user:userData,apply:applyData,exchange:exchangeData,bill:billLog};
-    fetch(DB_URL,{
-        method:"PUT",
-        headers:{"Content-Type":"application/json","X-Master-Key":"$2a$10$Kz8X7vQwPqYl6bPvF9kGTe8xQyR1zW3n5d7s9a0b2c4e6f8g"} ,
-        body:JSON.stringify({data:save})
-    }).catch(e=>{});
+    fetch(apiUrl+"&val="+encodeURIComponent(JSON.stringify(save)),{method:"GET"}).catch(()=>{});
 }
 
 function addBill(name,type,money,desc){
